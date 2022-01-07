@@ -1,5 +1,5 @@
 # ConnectFour
-A remake of the classic Connect Four with Blazor WASM.
+A remake of the classic game Connect Four with Blazor WASM.
 
 ## Screenshots
 
