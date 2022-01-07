@@ -1,0 +1,262 @@
+﻿@page "/"
+@using ConnectFour.App.Models
+@using AsyncAwaitBestPractices
+
+<PageTitle>Connect Four</PageTitle>
+
+<div id="game-board">
+    @if (_gameOver)
+    {
+        <h3>Game Over</h3>
+        <h5 class="@(!_playerTurn ? "player-1" : "player-2")">Player @(!_playerTurn ? "One" : "Two") wins!</h5>
+    }
+    else
+    {
+        <h3>It is <span class="@(_playerTurn ? "player-1" : "player-2")">Player @(_playerTurn ? "One" : "Two")'s</span> turn</h3>
+        <h5>Turn @_currentTurn</h5>
+    }
+    
+    <table>
+        <tr>
+            @foreach (var i in Enumerable.Range(0, 7))
+            {
+                <th>
+                    <button class="btn btn-primary" style="margin-bottom: 15px;" onclick="@(() => SelectColumn(i, true))">Select Column</button>
+                </th>
+            }
+        </tr>
+        @foreach (var row in _gameBoard.State)
+        {
+            <tr>
+                @foreach (var column in row)
+                {
+                    <td class="game-space">
+                        @if (column == true)
+                        {
+                            <span class="circle player-1"></span>
+                        }
+                        else if (column == false)
+                        {
+                            <span class="circle player-2"></span>
+                        }
+                        else
+                        {
+                            <span class="circle"></span>
+                        }
+                    </td>
+                }
+            </tr>
+        }
+    </table>
+    <br/>
+    <button class="btn btn-danger" onclick="@ResetGame">Reset Game</button>
+</div>
+
+@code {
+    private GameBoard _gameBoard = new GameBoard();
+    private bool _playerTurn = true;
+    private bool _gameOver = false;
+    private Random _rng = new Random();
+    private byte _currentTurn = 1;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        GameLoop().SafeFireAndForget();
+    }
+
+    private async Task GameLoop()
+    {
+        while (true)
+        {
+            await Task.Delay(1000);
+            if (_gameOver || _playerTurn) continue;
+            
+            SelectColumn(FindAvailableColumn(), false);
+        }
+
+        int FindAvailableColumn()
+        {
+            var availableColumns = new List<int>();
+            for (var i = 0; i < 7; i++)
+            {
+                for (var j = 0; j < 6; j++)
+                {
+                    if (_gameBoard.State[j][i] == null)
+                    {
+                        availableColumns.Add(i);
+                        break;
+                    }
+                }
+            }
+
+            return availableColumns[_rng.Next(0, availableColumns.Count)];
+        }
+    }
+
+    private void SelectColumn(int column, bool isPlayer)
+    {
+        if (_gameOver || (isPlayer && !_playerTurn)) return;
+        
+        for (var i = 0; i < _gameBoard.State.Length; i++)
+        {
+            var row = _gameBoard.State[i];
+
+            if (row[column] != null) break;
+                
+            if (i == _gameBoard.State.Length - 1)
+            {
+                row[column] = _playerTurn;
+                _playerTurn = !_playerTurn;
+                if (!isPlayer) _currentTurn++;
+                CheckForMatch();
+                break;
+            }
+            
+            if (_gameBoard.State[i + 1][column] != null)
+            {
+                row[column] = _playerTurn;
+                _playerTurn = !_playerTurn;
+                if (!isPlayer) _currentTurn++;
+                CheckForMatch();
+                break;
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private void ResetGame()
+    {
+        _gameOver = false;
+        _playerTurn = true;
+        _currentTurn = 1;
+        _gameBoard = new GameBoard();
+        StateHasChanged();
+    }
+    
+    private void CheckForMatch()
+    {
+        // Horizontal
+        for (var i = 0; i < 6; i++)
+        {
+            var streak = 0;
+            var player = false;
+            for (var j = 0; j < 7; j++)
+            {
+                var val = _gameBoard.State[i][j];
+                if (val == null)
+                {
+                    streak = 0;
+                }
+                else
+                {
+                    if (val != player)
+                    {
+                        streak = 1;
+                        player = val.Value;
+                    }
+                    else
+                    {
+                        streak++;
+                        if (streak == 4)
+                        {
+                            Console.WriteLine("Horizontal win");
+                            _gameOver = true;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Vertical
+        for (var i = 0; i < 7; i++)
+        {
+            var streak = 0;
+            var player = false;
+            for (var j = 0; j < 6; j++)
+            {
+                var val = _gameBoard.State[j][i];
+                if (val == null)
+                {
+                    streak = 0;
+                }
+                else
+                {
+                    if (val != player)
+                    {
+                        streak = 1;
+                        player = val.Value;
+                    }
+                    else
+                    {
+                        streak++;
+                        if (streak == 4)
+                        {
+                            Console.WriteLine("Vertical win");
+                            _gameOver = true;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Lower right diagonal sweep
+        for (var i = 0; i < 4; i++)
+        {
+            var streak = 0;
+            var player = false;
+            
+            for (var j = 0; j < 3; j++)
+            {
+                var state = _gameBoard.State[j][i];
+                if (state == null) continue;
+
+                player = state.Value;
+                streak = 1;
+                
+                for (var k = 1; k <= 3; k++)
+                {
+                    if (_gameBoard.State[j+k][i+k] == player) streak++;
+                }
+
+                if (streak == 4)
+                {
+                    Console.WriteLine("Lower right diagonal win");
+                    _gameOver = true;
+                    return;
+                }
+            }
+        }
+        
+        // Upper right diagonal sweep
+        for (var i = 0; i < 4; i++)
+        {
+            int streak;
+            var player = false;
+            
+            for (var j = 3; j < 6; j++)
+            {
+                var state = _gameBoard.State[j][i];
+                if (state == null) continue;
+
+                player = state.Value;
+                streak = 1;
+                
+                for (var k = 1; k <= 3; k++)
+                {
+                    if (_gameBoard.State[j-k][i+k] == player) streak++;
+                }
+
+                if (streak == 4)
+                {
+                    Console.WriteLine("Upper right diagonal win");
+                    _gameOver = true;
+                    return;
+                }
+            }
+        }
+    }
+}
